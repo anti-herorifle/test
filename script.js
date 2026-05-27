@@ -1,418 +1,404 @@
-let display = document.getElementById('display');
-let secondaryDisplay = document.getElementById('secondary-display');
-let currentExpression = '';
-let isDegreeMode = true;
-let lastResult = null;
+// Calculator with advanced functions
+
+let currentInput = '';
+let previousInput = '';
+let operator = null;
+let shouldResetDisplay = false;
+let isDegreeMode = true; // Default to degrees
 let isError = false;
 
-// Constants with high precision
-const PI = Math.PI;
-const E = Math.E;
+const display = document.getElementById('display');
+const expressionDisplay = document.getElementById('expression-display');
+const modeButton = document.getElementById('mode-btn');
 
-// Helper function to check if a number is close to a rational multiple of pi
-function findPiFraction(num) {
-    if (Math.abs(num) < 1e-10) return { num: 0, den: 1 };
+// Update display
+function updateDisplay() {
+    if (isError) {
+        display.value = 'ERROR';
+    } else {
+        display.value = currentInput || '0';
+    }
+    expressionDisplay.textContent = previousInput + (operator || '');
+}
+
+// Format number to avoid floating point errors
+function formatNumber(num) {
+    if (!isFinite(num)) return 'ERROR';
     
-    const tolerance = 1e-9;
-    const dividedByPi = num / PI;
+    // Handle very small numbers that should be zero
+    if (Math.abs(num) < 1e-12) return '0';
     
-    // Try to find a simple fraction for num/pi
-    for (let den = 1; den <= 100; den++) {
-        for (let numMult = -100; numMult <= 100; numMult++) {
-            const candidate = numMult * PI / den;
-            if (Math.abs(num - candidate) < tolerance) {
-                return { num: numMult, den: den };
+    // Round to 12 significant digits
+    const rounded = parseFloat(num.toPrecision(12));
+    
+    // Check if it's a nice fraction of pi
+    if (Math.abs(num) > 1e-10) {
+        const piMultiple = num / Math.PI;
+        const roundedPiMultiple = parseFloat(piMultiple.toPrecision(12));
+        
+        // Common pi fractions
+        const fractions = [
+            { val: 0, text: '0' },
+            { val: 1/6, text: '\u03C0/6' },
+            { val: 1/4, text: '\u03C0/4' },
+            { val: 1/3, text: '\u03C0/3' },
+            { val: 1/2, text: '\u03C0/2' },
+            { val: 2/3, text: '2\u03C0/3' },
+            { val: 3/4, text: '3\u03C0/4' },
+            { val: 5/6, text: '5\u03C0/6' },
+            { val: 1, text: '\u03C0' },
+            { val: 7/6, text: '7\u03C0/6' },
+            { val: 5/4, text: '5\u03C0/4' },
+            { val: 4/3, text: '4\u03C0/3' },
+            { val: 3/2, text: '3\u03C0/2' },
+            { val: 5/3, text: '5\u03C0/3' },
+            { val: 7/4, text: '7\u03C0/4' },
+            { val: 11/6, text: '11\u03C0/6' },
+            { val: 2, text: '2\u03C0' }
+        ];
+        
+        for (const frac of fractions) {
+            if (Math.abs(roundedPiMultiple - frac.val) < 1e-10) {
+                return frac.text;
+            }
+            if (Math.abs(roundedPiMultiple + frac.val) < 1e-10) {
+                return '-' + frac.text;
             }
         }
     }
-    return null;
-}
-
-// Format result in terms of pi if possible
-function formatWithPi(num) {
-    if (Math.abs(num) < 1e-10) return '0';
     
-    const piFraction = findPiFraction(num);
-    if (piFraction && piFraction.num !== 0) {
-        if (piFraction.den === 1) {
-            if (piFraction.num === 1) return 'π';
-            if (piFraction.num === -1) return '-π';
-            return piFraction.num + 'π';
-        } else {
-            if (piFraction.num === 1) return 'π/' + piFraction.den;
-            if (piFraction.num === -1) return '-π/' + piFraction.den;
-            return piFraction.num + 'π/' + piFraction.den;
-        }
+    // Convert to string and clean up
+    let str = rounded.toString();
+    
+    // Remove trailing zeros after decimal point
+    if (str.includes('.') && !str.includes('e')) {
+        str = str.replace(/\.?0+$/, '');
     }
-    return null;
+    
+    return str;
 }
 
-// Simplify square roots and return as surd form if possible
+// Simplify square roots to surd form
 function simplifySurd(num) {
     if (num < 0) return null;
-    if (num === 0) return { coeff: 0, radicand: 1 };
+    if (num === 0) return '0';
     
-    // Check for perfect squares up to 10000
-    const sqrtNum = Math.sqrt(num);
-    if (Math.abs(sqrtNum - Math.round(sqrtNum)) < 1e-10) {
-        return { coeff: Math.round(sqrtNum), radicand: 1 };
-    }
+    // Check for perfect squares
+    const sqrt = Math.sqrt(num);
+    if (Number.isInteger(sqrt)) return sqrt.toString();
     
     // Try to factor out perfect squares
-    let n = Math.floor(num);
-    let coeff = 1;
-    
-    for (let i = 2; i * i <= n; i++) {
-        while (n % (i * i) === 0) {
-            coeff *= i;
-            n /= (i * i);
+    for (let i = Math.floor(sqrt); i >= 2; i--) {
+        const square = i * i;
+        if (num % square === 0) {
+            const remaining = num / square;
+            if (remaining === 1) return i.toString();
+            return i + '\u221A' + remaining;
         }
     }
     
-    // Check if original was close to integer
-    if (Math.abs(num - Math.round(num)) < 1e-10) {
-        return { coeff: coeff, radicand: n };
-    }
-    
-    return null;
+    return '\u221A' + num;
 }
 
-// Format surd result
-function formatSurd(coeff, radicand) {
-    if (radicand === 1) return coeff.toString();
-    if (coeff === 1) return '√' + radicand;
-    if (coeff === -1) return '-√' + radicand;
-    return coeff + '√' + radicand;
-}
-
-function appendNumber(num) {
-    if (isError) {
-        clearDisplay();
-    }
-    currentExpression += num;
-    updateDisplay();
-}
-
-function appendOperator(operator) {
-    if (isError) {
-        clearDisplay();
-    }
-    const lastChar = currentExpression.slice(-1);
-    if (currentExpression === '' && operator !== '-') {
-        if (operator === '-') currentExpression = '0';
-        else return;
-    }
-    if (['+', '-', '*', '/', '^'].includes(lastChar)) {
-        currentExpression = currentExpression.slice(0, -1) + operator;
-    } else {
-        currentExpression += operator;
-    }
-    updateDisplay();
-}
-
-function appendFunction(func) {
-    if (isError) {
-        clearDisplay();
-    }
-    if (func === 'sqrt') {
-        currentExpression += 'sqrt(';
-    } else if (['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'log', 'ln'].includes(func)) {
-        currentExpression += func + '(';
-    } else if (func === 'pi') {
-        currentExpression += 'π';
-    } else if (func === 'e') {
-        currentExpression += 'e';
-    }
-    updateDisplay();
-}
-
-function toggleMode() {
-    isDegreeMode = !isDegreeMode;
-    const modeBtn = document.querySelector('button[onclick="toggleMode()"]');
-    modeBtn.textContent = isDegreeMode ? 'DEG' : 'RAD';
-    modeBtn.classList.toggle('mode-active', !isDegreeMode);
-}
-
-function clearDisplay() {
-    currentExpression = '';
-    lastResult = null;
-    isError = false;
-    secondaryDisplay.textContent = '';
-    updateDisplay();
-}
-
-function deleteLast() {
-    if (isError) {
-        clearDisplay();
-        return;
-    }
-    // Handle function names when deleting
-    const functions = ['sqrt', 'asin', 'acos', 'atan', 'asinh', 'acosh', 'atanh', 'sinh', 'cosh', 'tanh', 'sin', 'cos', 'tan', 'log'];
-    for (let func of functions) {
-        if (currentExpression.endsWith(func + '(')) {
-            currentExpression = currentExpression.slice(0, -(func.length + 1));
-            updateDisplay();
-            return;
-        }
-    }
-    currentExpression = currentExpression.slice(0, -1);
-    updateDisplay();
-}
-
-function toRadians(angle) {
-    return isDegreeMode ? angle * Math.PI / 180 : angle;
-}
-
-function toDegrees(radians) {
-    return isDegreeMode ? radians * 180 / Math.PI : radians;
-}
-
-// Helper function to round to significant digits to fix floating point imprecision
-function roundToSignificantDigits(num, digits) {
-    if (num === 0) return 0;
-    if (!isFinite(num)) return num;
-    const factor = Math.pow(10, digits - 1 - Math.floor(Math.log10(Math.abs(num))));
-    return Math.round(num * factor) / factor;
-}
-
-function calculate() {
+// Safe evaluation of mathematical expressions
+function safeEvaluate(expr) {
     try {
-        if (currentExpression === '') return;
-
-        let expr = currentExpression;
+        // Replace mathematical constants
+        expr = expr.replace(/\u03C0/g, 'Math.PI');
+        expr = expr.replace(/e(?![x])/g, 'Math.E');
         
-        // Store original expression for display
-        const originalExpr = currentExpression;
-
-        // Replace π with Math.PI and e with Math.E (but not in function names)
-        expr = expr.replace(/π/g, 'Math.PI');
-        // Replace standalone 'e' with Math.E (careful not to replace in numbers like 2.5e10)
-        expr = expr.replace(/(?<![0-9])e(?![0-9])/g, 'Math.E');
-
-        // Replace ^ with ** for exponentiation
-        expr = expr.replace(/\^/g, '**');
-
-        // Replace sqrt with Math.sqrt
-        expr = expr.replace(/sqrt\(/g, 'Math.sqrt(');
-
-        // Replace log with Math.log10 and ln with Math.log
+        // Replace mathematical functions
+        expr = expr.replace(/sin\(/g, 'sin(');
+        expr = expr.replace(/cos\(/g, 'cos(');
+        expr = expr.replace(/tan\(/g, 'tan(');
+        expr = expr.replace(/asin\(/g, 'asin(');
+        expr = expr.replace(/acos\(/g, 'acos(');
+        expr = expr.replace(/atan\(/g, 'atan(');
+        expr = expr.replace(/sinh\(/g, 'sinh(');
+        expr = expr.replace(/cosh\(/g, 'cosh(');
+        expr = expr.replace(/tanh\(/g, 'tanh(');
+        expr = expr.replace(/asinh\(/g, 'asinh(');
+        expr = expr.replace(/acosh\(/g, 'acosh(');
+        expr = expr.replace(/atanh\(/g, 'atanh(');
         expr = expr.replace(/log\(/g, 'Math.log10(');
         expr = expr.replace(/ln\(/g, 'Math.log(');
-
-        // Handle hyperbolic functions
-        expr = expr.replace(/sinh\(/g, 'Math.sinh(');
-        expr = expr.replace(/cosh\(/g, 'Math.cosh(');
-        expr = expr.replace(/tanh\(/g, 'Math.tanh(');
-        expr = expr.replace(/asinh\(/g, 'Math.asinh(');
-        expr = expr.replace(/acosh\(/g, 'Math.acosh(');
-        expr = expr.replace(/atanh\(/g, 'Math.atanh(');
-
-        // Handle trigonometric functions based on mode
-        // For degree mode, we need to properly wrap arguments
-        if (isDegreeMode) {
-            // For regular trig functions, wrap argument in toRadians
-            expr = expr.replace(/sin\(/g, 'Math.sin(toRadians(');
-            expr = expr.replace(/cos\(/g, 'Math.cos(toRadians(');
-            expr = expr.replace(/tan\(/g, 'Math.tan(toRadians(');
-            // For inverse functions, apply toDegrees to the result
-            expr = expr.replace(/asin\(/g, 'toDegrees(Math.asin(');
-            expr = expr.replace(/acos\(/g, 'toDegrees(Math.acos(');
-            expr = expr.replace(/atan\(/g, 'toDegrees(Math.atan(');
-        } else {
-            // For radian mode, use direct Math functions
-            expr = expr.replace(/sin\(/g, 'Math.sin(');
-            expr = expr.replace(/cos\(/g, 'Math.cos(');
-            expr = expr.replace(/tan\(/g, 'Math.tan(');
-            expr = expr.replace(/asin\(/g, 'Math.asin(');
-            expr = expr.replace(/acos\(/g, 'Math.acos(');
-            expr = expr.replace(/atan\(/g, 'Math.atan(');
-        }
-
-        // Count parentheses and add closing ones if needed
-        const openParens = (expr.match(/\(/g) || []).length;
-        const closeParens = (expr.match(/\)/g) || []).length;
-        if (openParens > closeParens) {
-            expr += ')'.repeat(openParens - closeParens);
-        }
-
-        // Evaluate the expression safely
-        const result = Function('toRadians', 'toDegrees', '"use strict";return (' + expr + ')')(toRadians, toDegrees);
-
-        // Check for division by zero or invalid results
-        if (!isFinite(result) || isNaN(result)) {
-            currentExpression = 'Error';
-            secondaryDisplay.textContent = '';
-            isError = true;
-        } else {
-            // Try to format result in terms of pi for trig results
-            let formattedResult = null;
-            
-            // Check if result can be expressed in terms of pi
-            const piFormatted = formatWithPi(result);
-            if (piFormatted) {
-                formattedResult = piFormatted;
-            }
-            
-            // Check if result is a square root (surd form)
-            if (!formattedResult && Number.isInteger(Math.round(result * 1e10) / 1e10)) {
-                const roundedResult = Math.round(result * 1e10) / 1e10;
-                const surdFormatted = simplifySurd(roundedResult * roundedResult);
-                if (surdFormatted && surdFormatted.radicand !== 1) {
-                    // Only show surd if it's a clean simplification
-                    const checkValue = surdFormatted.coeff * Math.sqrt(surdFormatted.radicand);
-                    if (Math.abs(checkValue - Math.abs(result)) < 1e-9) {
-                        formattedResult = formatSurd(surdFormatted.coeff, surdFormatted.radicand);
-                    }
-                }
-            }
-            
-            // Use significant digits rounding for display
-            const roundedResult = roundToSignificantDigits(result, 12);
-            
-            secondaryDisplay.textContent = originalExpr + ' =';
-            
-            // Show exact form if available, otherwise show decimal
-            if (formattedResult) {
-                currentExpression = formattedResult + ' (' + roundedResult.toString() + ')';
-            } else {
-                currentExpression = roundedResult.toString();
-            }
-            lastResult = roundedResult;
-            isError = false;
-        }
+        expr = expr.replace(/\u221A\(/g, 'Math.sqrt(');
+        expr = expr.replace(/\^/g, '**');
+        
+        // Define trigonometric functions with degree/radian support
+        const sin = function(x) { return Math.sin(isDegreeMode ? x * Math.PI / 180 : x); };
+        const cos = function(x) { return Math.cos(isDegreeMode ? x * Math.PI / 180 : x); };
+        const tan = function(x) { return Math.tan(isDegreeMode ? x * Math.PI / 180 : x); };
+        
+        // Inverse trigonometric functions - return in degrees or radians
+        const asin = function(x) {
+            var result = Math.asin(x);
+            return isDegreeMode ? result * 180 / Math.PI : result;
+        };
+        
+        const acos = function(x) {
+            var result = Math.acos(x);
+            return isDegreeMode ? result * 180 / Math.PI : result;
+        };
+        
+        const atan = function(x) {
+            var result = Math.atan(x);
+            return isDegreeMode ? result * 180 / Math.PI : result;
+        };
+        
+        // Hyperbolic functions
+        const sinh = function(x) { return Math.sinh(x); };
+        const cosh = function(x) { return Math.cosh(x); };
+        const tanh = function(x) { return Math.tanh(x); };
+        
+        // Inverse hyperbolic functions using logarithm formulas
+        const asinh = function(x) { return Math.log(x + Math.sqrt(x * x + 1)); };
+        const acosh = function(x) {
+            if (x < 1) throw new Error('Invalid input');
+            return Math.log(x + Math.sqrt(x * x - 1));
+        };
+        const atanh = function(x) {
+            if (Math.abs(x) >= 1) throw new Error('Invalid input');
+            return 0.5 * Math.log((1 + x) / (1 - x));
+        };
+        
+        // Evaluate the expression
+        const result = eval(expr);
+        return result;
     } catch (error) {
-        currentExpression = 'Error';
-        secondaryDisplay.textContent = '';
+        throw error;
+    }
+}
+
+// Calculate result
+function calculate() {
+    if (isError) {
+        clear();
+        return;
+    }
+    
+    if (!currentInput) return;
+    
+    try {
+        let expr = currentInput;
+        
+        // Handle implicit multiplication (e.g., 2π -> 2*π)
+        expr = expr.replace(/(\d)([\u03C0e])/g, '$1*$2');
+        expr = expr.replace(/([\u03C0e])(\d)/g, '$1*$2');
+        expr = expr.replace(/(\))(\d)/g, '$1*$2');
+        expr = expr.replace(/(\d)(\()/g, '$1*$2');
+        expr = expr.replace(/(\))(\()/g, '$1*$2');
+        expr = expr.replace(/([\u03C0e])(\()/g, '$1*$2');
+        expr = expr.replace(/(\))([\u03C0e])/g, '$1*$2');
+        
+        const result = safeEvaluate(expr);
+        
+        // Format the result
+        let formattedResult;
+        
+        // Check for surd form if result is from a square root operation
+        if (currentInput.includes('\u221A')) {
+            const numericResult = parseFloat(result.toPrecision(12));
+            if (numericResult >= 0 && Number.isInteger(numericResult * numericResult)) {
+                formattedResult = simplifySurd(numericResult * numericResult);
+            } else {
+                formattedResult = formatNumber(result);
+            }
+        } else {
+            formattedResult = formatNumber(result);
+        }
+        
+        previousInput = currentInput + ' = ';
+        currentInput = formattedResult;
+        operator = null;
+        shouldResetDisplay = true;
+        isError = false;
+        updateDisplay();
+    } catch (error) {
+        currentInput = '';
         isError = true;
+        updateDisplay();
+    }
+}
+
+// Add to display
+function appendToDisplay(value) {
+    if (isError) {
+        clear();
+    }
+    
+    if (shouldResetDisplay && !isNaN(value)) {
+        currentInput = value;
+        shouldResetDisplay = false;
+    } else {
+        currentInput += value;
+        shouldResetDisplay = false;
     }
     updateDisplay();
 }
 
-// Fraction conversion functions
-function gcd(a, b) {
-    a = Math.abs(a);
-    b = Math.abs(b);
-    while (b !== 0) {
-        let t = b;
-        b = a % b;
-        a = t;
+// Clear all
+function clear() {
+    currentInput = '';
+    previousInput = '';
+    operator = null;
+    isError = false;
+    shouldResetDisplay = false;
+    updateDisplay();
+}
+
+// Backspace
+function backspace() {
+    if (isError) {
+        clear();
+        return;
     }
-    return a;
+    
+    if (shouldResetDisplay) {
+        clear();
+        return;
+    }
+    
+    currentInput = currentInput.slice(0, -1);
+    updateDisplay();
 }
 
-function decimalToFraction(decimal) {
-    if (!isFinite(decimal)) return null;
-
-    const tolerance = 1.0e-7;
-    let h1 = 1, h2 = 0, k1 = 0, k2 = 1;
-    let b = decimal;
-
-    do {
-        let a = Math.floor(b);
-        let aux = h1;
-        h1 = a * h1 + h2;
-        h2 = aux;
-
-        aux = k1;
-        k1 = a * k1 + k2;
-        k2 = aux;
-
-        b = 1 / (b - a);
-    } while (Math.abs(decimal - h1 / k1) > decimal * tolerance);
-
-    return { numerator: h1, denominator: k1 };
+// Toggle degree/radian mode
+function toggleMode() {
+    isDegreeMode = !isDegreeMode;
+    modeButton.textContent = isDegreeMode ? 'DEG' : 'RAD';
 }
 
-function fractionToDecimal(numerator, denominator) {
-    if (denominator === 0) return 'Error';
-    return numerator / denominator;
-}
-
+// Convert between fraction and decimal
 function convertFraction() {
+    if (isError) {
+        clear();
+        return;
+    }
+    
+    if (!currentInput) return;
+    
     try {
-        if (currentExpression === '' || currentExpression === 'Error') return;
-
-        const value = parseFloat(currentExpression);
-
-        if (isNaN(value)) {
-            // Try to parse as fraction (e.g., "1/2")
-            const parts = currentExpression.split('/');
-            if (parts.length === 2) {
-                const num = parseFloat(parts[0]);
-                const den = parseFloat(parts[1]);
-                if (!isNaN(num) && !isNaN(den) && den !== 0) {
-                    const result = fractionToDecimal(num, den);
-                    secondaryDisplay.textContent = currentExpression + ' =';
-                    currentExpression = result.toString();
-                    updateDisplay();
-                    return;
-                }
-            }
+        const value = parseFloat(safeEvaluate(currentInput));
+        
+        if (isNaN(value) || !isFinite(value)) {
             return;
         }
-
-        // Convert decimal to fraction
-        const fraction = decimalToFraction(value);
-        if (fraction) {
-            // Simplify the fraction
-            const commonDivisor = gcd(fraction.numerator, fraction.denominator);
-            const simplifiedNum = fraction.numerator / commonDivisor;
-            const simplifiedDen = fraction.denominator / commonDivisor;
-
-            secondaryDisplay.textContent = value + ' ≈';
-            currentExpression = `${simplifiedNum}/${simplifiedDen}`;
-            updateDisplay();
+        
+        // Check if it looks like a fraction input (contains /)
+        if (currentInput.includes('/')) {
+            // Convert fraction to decimal
+            const parts = currentInput.split('/');
+            if (parts.length === 2) {
+                const numerator = parseFloat(parts[0]);
+                const denominator = parseFloat(parts[1]);
+                if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+                    currentInput = formatNumber(numerator / denominator);
+                    shouldResetDisplay = true;
+                    updateDisplay();
+                }
+            }
+        } else {
+            // Convert decimal to fraction
+            const decimal = value;
+            
+            // Handle negative numbers
+            const sign = decimal < 0 ? '-' : '';
+            const absDecimal = Math.abs(decimal);
+            
+            // Try to find a simple fraction
+            const maxDenominator = 1000;
+            let bestNumerator = 0;
+            let bestDenominator = 1;
+            let bestError = Infinity;
+            
+            for (let denom = 1; denom <= maxDenominator; denom++) {
+                const numer = Math.round(absDecimal * denom);
+                const error = Math.abs(absDecimal - numer / denom);
+                
+                if (error < bestError) {
+                    bestError = error;
+                    bestNumerator = numer;
+                    bestDenominator = denom;
+                    
+                    // If we found an exact match, stop
+                    if (error < 1e-12) break;
+                }
+            }
+            
+            // Only show fraction if it's a good approximation
+            if (bestError < 1e-6) {
+                if (bestDenominator === 1) {
+                    currentInput = sign + bestNumerator.toString();
+                } else {
+                    currentInput = sign + bestNumerator + '/' + bestDenominator;
+                }
+                shouldResetDisplay = true;
+                updateDisplay();
+            }
         }
     } catch (error) {
-        // Silently fail on conversion errors
+        // Ignore conversion errors
     }
 }
 
-function updateDisplay() {
-    // Replace * with × and other symbols for better visual display
-    let displayValue = currentExpression
-        .replace(/\*\*/g, '^')
-        .replace(/\*/g, '×')
-        .replace(/sqrt\(/g, '√(');
-    display.value = displayValue;
-}
-
-// Add keyboard support
-document.addEventListener('keydown', function(event) {
-    const key = event.key;
-
-    // Clear error state on any keyboard input
+// Add function to display
+function addFunction(funcName) {
     if (isError) {
-        clearDisplay();
+        clear();
     }
+    
+    if (shouldResetDisplay) {
+        currentInput = funcName + '(';
+        shouldResetDisplay = false;
+    } else {
+        currentInput += funcName + '(';
+    }
+    updateDisplay();
+}
 
-    if (/[0-9]/.test(key)) {
-        appendNumber(key);
+// Keyboard support
+document.addEventListener('keydown', function(event) {
+    if (isError && event.key !== 'Escape') {
+        clear();
+    }
+    
+    const key = event.key;
+    
+    if (!isNaN(key) || key === '.') {
+        appendToDisplay(key);
     } else if (key === '+') {
-        appendOperator('+');
+        appendToDisplay('+');
     } else if (key === '-') {
-        appendOperator('-');
+        appendToDisplay('-');
     } else if (key === '*') {
-        appendOperator('*');
+        appendToDisplay('*');
     } else if (key === '/') {
-        appendOperator('/');
+        event.preventDefault();
+        appendToDisplay('/');
     } else if (key === '^') {
-        appendOperator('^');
-    } else if (key === '.') {
-        appendNumber('.');
+        appendToDisplay('^');
     } else if (key === '(' || key === ')') {
-        appendNumber(key);
+        appendToDisplay(key);
     } else if (key === 'Enter' || key === '=') {
         event.preventDefault();
         calculate();
     } else if (key === 'Backspace') {
-        deleteLast();
-    } else if (key === 'Escape' || key === 'c' || key === 'C') {
-        clearDisplay();
+        backspace();
+    } else if (key === 'Escape') {
+        clear();
     } else if (key.toLowerCase() === 'p') {
-        appendFunction('pi');
-    } else if (key.toLowerCase() === 'e' && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        // Only add e constant if not part of a modifier key combo
-        appendFunction('e');
+        appendToDisplay('\u03C0');
+    } else if (key.toLowerCase() === 'e') {
+        appendToDisplay('e');
+    } else if (key.toLowerCase() === 's' && event.shiftKey) {
+        addFunction('asin');
+    } else if (key.toLowerCase() === 'c' && event.shiftKey) {
+        addFunction('acos');
+    } else if (key.toLowerCase() === 't' && event.shiftKey) {
+        addFunction('atan');
     }
 });
+
+// Initialize display
+updateDisplay();
