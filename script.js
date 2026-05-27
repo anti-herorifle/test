@@ -68,62 +68,68 @@ function toDegrees(radians) {
     return isDegreeMode ? radians * 180 / Math.PI : radians;
 }
 
+// Helper function to round to significant digits to fix floating point imprecision
+function roundToSignificantDigits(num, digits) {
+    if (num === 0) return 0;
+    if (!isFinite(num)) return num;
+    const factor = Math.pow(10, digits - 1 - Math.floor(Math.log10(Math.abs(num))));
+    return Math.round(num * factor) / factor;
+}
+
 function calculate() {
     try {
         if (currentExpression === '') return;
-        
+
         let expr = currentExpression;
-        
+
         // Replace ^ with ** for exponentiation
         expr = expr.replace(/\^/g, '**');
-        
+
         // Replace sqrt with Math.sqrt
         expr = expr.replace(/sqrt\(/g, 'Math.sqrt(');
-        
+
         // Replace log with Math.log10 and ln with Math.log
         expr = expr.replace(/log\(/g, 'Math.log10(');
         expr = expr.replace(/ln\(/g, 'Math.log(');
-        
+
         // Handle trigonometric functions based on mode
-        expr = expr.replace(/sin\(/g, isDegreeMode ? 'Math.sin(toRadians(' : 'Math.sin(');
-        expr = expr.replace(/cos\(/g, isDegreeMode ? 'Math.cos(toRadians(' : 'Math.cos(');
-        expr = expr.replace(/tan\(/g, isDegreeMode ? 'Math.tan(toRadians(' : 'Math.tan(');
-        
-        // Handle inverse trigonometric functions
         if (isDegreeMode) {
+            // For degree mode, wrap the argument in toRadians
+            expr = expr.replace(/sin\(/g, 'Math.sin(toRadians(');
+            expr = expr.replace(/cos\(/g, 'Math.cos(toRadians(');
+            expr = expr.replace(/tan\(/g, 'Math.tan(toRadians(');
+            // For inverse functions, apply toDegrees to the result
             expr = expr.replace(/asin\(/g, 'toDegrees(Math.asin(');
             expr = expr.replace(/acos\(/g, 'toDegrees(Math.acos(');
             expr = expr.replace(/atan\(/g, 'toDegrees(Math.atan(');
         } else {
+            // For radian mode, use direct Math functions
+            expr = expr.replace(/sin\(/g, 'Math.sin(');
+            expr = expr.replace(/cos\(/g, 'Math.cos(');
+            expr = expr.replace(/tan\(/g, 'Math.tan(');
             expr = expr.replace(/asin\(/g, 'Math.asin(');
             expr = expr.replace(/acos\(/g, 'Math.acos(');
             expr = expr.replace(/atan\(/g, 'Math.atan(');
         }
-        
+
         // Count parentheses and add closing ones if needed
         const openParens = (expr.match(/\(/g) || []).length;
         const closeParens = (expr.match(/\)/g) || []).length;
         if (openParens > closeParens) {
             expr += ')'.repeat(openParens - closeParens);
         }
-        
-        // Add closing parentheses for toRadians if in degree mode
-        if (isDegreeMode) {
-            const toRadiansCount = (expr.match(/toRadians\(/g) || []).length;
-            const existingClosing = (expr.match(/\)\)/g) || []).length;
-            // This is a simplified approach - may need adjustment for nested functions
-        }
-        
+
         // Evaluate the expression safely
         const result = Function('toRadians', 'toDegrees', '"use strict";return (' + expr + ')')(toRadians, toDegrees);
-        
+
         // Check for division by zero or invalid results
         if (!isFinite(result) || isNaN(result)) {
             currentExpression = 'Error';
             secondaryDisplay.textContent = '';
         } else {
-            // Round to avoid floating point precision issues
-            const roundedResult = parseFloat(result.toPrecision(12));
+            // Use a more robust rounding approach to handle floating point imprecision
+            // Round to 10 significant digits for display
+            const roundedResult = roundToSignificantDigits(result, 10);
             secondaryDisplay.textContent = currentExpression + ' =';
             currentExpression = roundedResult.toString();
             lastResult = roundedResult;
@@ -149,24 +155,24 @@ function gcd(a, b) {
 
 function decimalToFraction(decimal) {
     if (!isFinite(decimal)) return null;
-    
+
     const tolerance = 1.0e-7;
     let h1 = 1, h2 = 0, k1 = 0, k2 = 1;
     let b = decimal;
-    
+
     do {
         let a = Math.floor(b);
         let aux = h1;
         h1 = a * h1 + h2;
         h2 = aux;
-        
+
         aux = k1;
         k1 = a * k1 + k2;
         k2 = aux;
-        
+
         b = 1 / (b - a);
     } while (Math.abs(decimal - h1 / k1) > decimal * tolerance);
-    
+
     return { numerator: h1, denominator: k1 };
 }
 
@@ -178,9 +184,9 @@ function fractionToDecimal(numerator, denominator) {
 function convertFraction() {
     try {
         if (currentExpression === '' || currentExpression === 'Error') return;
-        
+
         const value = parseFloat(currentExpression);
-        
+
         if (isNaN(value)) {
             // Try to parse as fraction (e.g., "1/2")
             const parts = currentExpression.split('/');
@@ -197,7 +203,7 @@ function convertFraction() {
             }
             return;
         }
-        
+
         // Convert decimal to fraction
         const fraction = decimalToFraction(value);
         if (fraction) {
@@ -205,7 +211,7 @@ function convertFraction() {
             const commonDivisor = gcd(fraction.numerator, fraction.denominator);
             const simplifiedNum = fraction.numerator / commonDivisor;
             const simplifiedDen = fraction.denominator / commonDivisor;
-            
+
             secondaryDisplay.textContent = value + ' ≈';
             currentExpression = `${simplifiedNum}/${simplifiedDen}`;
             updateDisplay();
@@ -227,7 +233,7 @@ function updateDisplay() {
 // Add keyboard support
 document.addEventListener('keydown', function(event) {
     const key = event.key;
-    
+
     if (/[0-9]/.test(key)) {
         appendNumber(key);
     } else if (key === '+') {
