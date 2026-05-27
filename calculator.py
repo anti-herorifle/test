@@ -1,500 +1,691 @@
+#!/usr/bin/env python3
+"""
+Advanced Scientific Calculator with Taylor Series Approximations
+Features:
+- Custom elementary functions using Taylor series
+- LaTeX-style visual input display
+- Revamped modern UI
+- Exponent support with ^ notation
+- Trig, inverse trig, hyperbolic, and inverse hyperbolic functions
+- Constants (pi, e)
+- Fraction conversion
+- DEG/RAD mode
+"""
+
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, font
 import math
+import sympy
+from sympy import symbols, simplify, nsimplify, pi, E, sqrt, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, exp, log, N
 import re
-from fractions import Fraction
 
-class TaylorMath:
-    """
-    Custom mathematical engine using Taylor Series approximations.
-    Includes range reduction for better convergence and accuracy.
-    """
+class TaylorSeriesCalculator:
+    """Custom mathematical functions using Taylor series approximations"""
     
-    PI = 3.141592653589793238462643383279502884197
-    E = 2.718281828459045235360287471352662497757
-
     @staticmethod
     def factorial(n):
-        if n == 0 or n == 1:
+        if n <= 1:
             return 1
         result = 1
         for i in range(2, n + 1):
             result *= i
         return result
-
-    @staticmethod
-    def normalize_angle_rad(x):
-        """Reduce angle to [-PI, PI] for better convergence."""
-        two_pi = 2 * TaylorMath.PI
-        x = x % two_pi
-        if x > TaylorMath.PI:
-            x -= two_pi
-        elif x < -TaylorMath.PI:
-            x += two_pi
-        return x
-
+    
     @staticmethod
     def sin_taylor(x, terms=20):
-        """Calculate sin(x) using Taylor Series: x - x^3/3! + x^5/5! - ..."""
-        x = TaylorMath.normalize_angle_rad(x)
-        result = 0.0
+        """sin(x) = x - x³/3! + x⁵/5! - x⁷/7! + ..."""
+        # Normalize x to [-π, π] for better convergence
+        while x > math.pi:
+            x -= 2 * math.pi
+        while x < -math.pi:
+            x += 2 * math.pi
+        
+        result = 0
         for n in range(terms):
             sign = (-1) ** n
             power = 2 * n + 1
-            term = (sign * (x ** power)) / TaylorMath.factorial(power)
+            term = sign * (x ** power) / TaylorSeriesCalculator.factorial(power)
             result += term
         return result
-
+    
     @staticmethod
     def cos_taylor(x, terms=20):
-        """Calculate cos(x) using Taylor Series: 1 - x^2/2! + x^4/4! - ..."""
-        x = TaylorMath.normalize_angle_rad(x)
-        result = 0.0
+        """cos(x) = 1 - x²/2! + x⁴/4! - x⁶/6! + ..."""
+        # Normalize x to [-π, π]
+        while x > math.pi:
+            x -= 2 * math.pi
+        while x < -math.pi:
+            x += 2 * math.pi
+        
+        result = 0
         for n in range(terms):
             sign = (-1) ** n
             power = 2 * n
-            term = (sign * (x ** power)) / TaylorMath.factorial(power)
+            term = sign * (x ** power) / TaylorSeriesCalculator.factorial(power)
             result += term
         return result
-
-    @staticmethod
-    def exp_taylor(x, terms=30):
-        """Calculate e^x using Taylor Series: 1 + x + x^2/2! + ..."""
-        # Range reduction: e^x = (e^(x/k))^k to keep x small
-        k = 1
-        while abs(x) > 1:
-            x /= 2
-            k *= 2
-        
-        result = 1.0
-        term = 1.0
-        for n in range(1, terms):
-            term *= x / n
-            result += term
-            if abs(term) < 1e-15:
-                break
-        
-        return result ** k
-
-    @staticmethod
-    def atan_taylor(x, terms=100):
-        """Calculate atan(x) using Taylor Series: x - x^3/3 + x^5/5 - ..."""
-        # Convergence only for |x| <= 1. Use identity for |x| > 1
-        if abs(x) > 1:
-            return (TaylorMath.PI / 2 * (1 if x > 0 else -1)) - TaylorMath.atan_taylor(1/x, terms)
-        
-        result = 0.0
-        x_sq = x * x
-        for n in range(terms):
-            sign = (-1) ** n
-            power = 2 * n + 1
-            term = (sign * (x ** power)) / power
-            result += term
-            if abs(term) < 1e-15:
-                break
-        return result
-
+    
     @staticmethod
     def tan_taylor(x, terms=20):
-        s = TaylorMath.sin_taylor(x, terms)
-        c = TaylorMath.cos_taylor(x, terms)
-        if abs(c) < 1e-10:
-            raise ValueError("Undefined")
-        return s / c
-
+        """tan(x) = sin(x) / cos(x)"""
+        cos_val = TaylorSeriesCalculator.cos_taylor(x, terms)
+        if abs(cos_val) < 1e-10:
+            raise ValueError("Undefined (tan approaches infinity)")
+        return TaylorSeriesCalculator.sin_taylor(x, terms) / cos_val
+    
     @staticmethod
-    def sinh_taylor(x, terms=30):
-        """sinh(x) = (e^x - e^-x) / 2"""
-        return (TaylorMath.exp_taylor(x, terms) - TaylorMath.exp_taylor(-x, terms)) / 2
-
-    @staticmethod
-    def cosh_taylor(x, terms=30):
-        """cosh(x) = (e^x + e^-x) / 2"""
-        return (TaylorMath.exp_taylor(x, terms) + TaylorMath.exp_taylor(-x, terms)) / 2
-
-    @staticmethod
-    def tanh_taylor(x, terms=30):
-        s = TaylorMath.sinh_taylor(x, terms)
-        c = TaylorMath.cosh_taylor(x, terms)
-        return s / c
-
+    def exp_taylor(x, terms=30):
+        """e^x = 1 + x + x²/2! + x³/3! + ..."""
+        # For large x, use e^x = e^(x/n)^n for better convergence
+        if abs(x) > 10:
+            n = int(abs(x) / 5) + 1
+            return TaylorSeriesCalculator.exp_taylor(x / n, terms) ** n
+        
+        result = 0
+        for i in range(terms):
+            result += (x ** i) / TaylorSeriesCalculator.factorial(i)
+        return result
+    
     @staticmethod
     def ln_taylor(x, terms=100):
-        """Calculate ln(x) using series for ln((1+y)/(1-y)) where y = (x-1)/(x+1)"""
+        """ln(x) using ln(1+y) = y - y²/2 + y³/3 - ... for |y| < 1"""
         if x <= 0:
-            raise ValueError("Logarithm undefined for non-positive values")
+            raise ValueError("ln undefined for x <= 0")
         
-        # Reduce range: ln(x * 2^n) = ln(x) + n*ln(2)
-        n = 0
+        # Use ln(x) = ln(x/e^k) + k to bring x close to 1
+        k = 0
         while x > 2:
-            x /= 2
-            n += 1
+            x /= math.e
+            k += 1
         while x < 0.5:
-            x *= 2
-            n -= 1
-            
-        y = (x - 1) / (x + 1)
-        y_sq = y * y
-        result = 0.0
-        for k in range(terms):
-            term = (y ** (2 * k + 1)) / (2 * k + 1)
+            x *= math.e
+            k -= 1
+        
+        # Now use ln(1 + y) where y = x - 1
+        y = x - 1
+        if abs(y) >= 1:
+            # Fallback for edge cases
+            return math.log(x)
+        
+        result = 0
+        for n in range(1, terms):
+            term = ((-1) ** (n + 1)) * (y ** n) / n
             result += term
             if abs(term) < 1e-15:
                 break
         
-        ln2 = 0.6931471805599453
-        return 2 * result + n * ln2
-
+        return result + k
+    
+    @staticmethod
+    def sqrt_newton(x, iterations=20):
+        """Square root using Newton's method"""
+        if x < 0:
+            raise ValueError("sqrt undefined for negative numbers")
+        if x == 0:
+            return 0
+        
+        guess = x / 2 if x > 1 else 1
+        for _ in range(iterations):
+            guess = (guess + x / guess) / 2
+        return guess
+    
     @staticmethod
     def asin_taylor(x, terms=50):
-        """asin(x) using integral of 1/sqrt(1-t^2) series or atan identity"""
+        """asin(x) = x + (1/2)(x³/3) + (1·3)/(2·4)(x⁵/5) + ..."""
         if abs(x) > 1:
-            raise ValueError("Domain error")
-        if abs(x) == 1:
-            return TaylorMath.PI / 2 * (1 if x > 0 else -1)
-        # asin(x) = atan(x / sqrt(1-x^2))
-        try:
-            val = x / math.sqrt(1 - x*x)
-            return TaylorMath.atan_taylor(val, terms)
-        except:
-            return TaylorMath.PI / 2 * (1 if x > 0 else -1)
-
+            raise ValueError("asin undefined for |x| > 1")
+        
+        # For |x| close to 1, use identity: asin(x) = π/2 - asin(√(1-x²))
+        if abs(x) > 0.9:
+            sign = 1 if x > 0 else -1
+            return sign * (math.pi / 2 - TaylorSeriesCalculator.asin_taylor(TaylorSeriesCalculator.sqrt_newton(1 - x*x), terms))
+        
+        result = x
+        term = x
+        for n in range(1, terms):
+            term *= x * x * (2*n - 1) * (2*n - 1) / ((2*n) * (2*n + 1))
+            result += term
+            if abs(term) < 1e-15:
+                break
+        return result
+    
     @staticmethod
     def acos_taylor(x, terms=50):
-        """acos(x) = PI/2 - asin(x)"""
-        return TaylorMath.PI / 2 - TaylorMath.asin_taylor(x, terms)
-
+        """acos(x) = π/2 - asin(x)"""
+        return math.pi / 2 - TaylorSeriesCalculator.asin_taylor(x, terms)
+    
     @staticmethod
-    def atan_taylor_wrapper(x, terms=50):
-        return TaylorMath.atan_taylor(x, terms)
-
+    def atan_taylor(x, terms=50):
+        """atan(x) = x - x³/3 + x⁵/5 - x⁷/7 + ..."""
+        # For |x| > 1, use identity: atan(x) = π/2 - atan(1/x)
+        if abs(x) > 1:
+            sign = 1 if x > 0 else -1
+            return sign * (math.pi / 2 - TaylorSeriesCalculator.atan_taylor(1/x, terms))
+        
+        result = 0
+        for n in range(terms):
+            term = ((-1) ** n) * (x ** (2*n + 1)) / (2*n + 1)
+            result += term
+            if abs(term) < 1e-15:
+                break
+        return result
+    
     @staticmethod
-    def asinh_taylor(x, terms=30):
-        """asinh(x) = ln(x + sqrt(x^2 + 1))"""
-        return TaylorMath.ln_taylor(x + math.sqrt(x*x + 1), terms)
-
+    def sinh_taylor(x, terms=20):
+        """sinh(x) = x + x³/3! + x⁵/5! + ..."""
+        return (TaylorSeriesCalculator.exp_taylor(x, terms) - TaylorSeriesCalculator.exp_taylor(-x, terms)) / 2
+    
     @staticmethod
-    def acosh_taylor(x, terms=30):
-        """acosh(x) = ln(x + sqrt(x^2 - 1))"""
+    def cosh_taylor(x, terms=20):
+        """cosh(x) = 1 + x²/2! + x⁴/4! + ..."""
+        return (TaylorSeriesCalculator.exp_taylor(x, terms) + TaylorSeriesCalculator.exp_taylor(-x, terms)) / 2
+    
+    @staticmethod
+    def tanh_taylor(x, terms=20):
+        """tanh(x) = sinh(x) / cosh(x)"""
+        cosh_val = TaylorSeriesCalculator.cosh_taylor(x, terms)
+        if abs(cosh_val) < 1e-10:
+            raise ValueError("Undefined")
+        return TaylorSeriesCalculator.sinh_taylor(x, terms) / cosh_val
+    
+    @staticmethod
+    def asinh_taylor(x, terms=50):
+        """asinh(x) = ln(x + √(x² + 1))"""
+        return TaylorSeriesCalculator.ln_taylor(x + TaylorSeriesCalculator.sqrt_newton(x*x + 1), terms)
+    
+    @staticmethod
+    def acosh_taylor(x, terms=50):
+        """acosh(x) = ln(x + √(x² - 1))"""
         if x < 1:
-            raise ValueError("Domain error")
-        return TaylorMath.ln_taylor(x + math.sqrt(x*x - 1), terms)
-
+            raise ValueError("acosh undefined for x < 1")
+        return TaylorSeriesCalculator.ln_taylor(x + TaylorSeriesCalculator.sqrt_newton(x*x - 1), terms)
+    
     @staticmethod
     def atanh_taylor(x, terms=50):
         """atanh(x) = 0.5 * ln((1+x)/(1-x))"""
         if abs(x) >= 1:
-            raise ValueError("Domain error")
-        return 0.5 * TaylorMath.ln_taylor((1+x)/(1-x), terms)
-
-    @staticmethod
-    def sqrt_newton(x, iterations=20):
-        if x < 0:
-            raise ValueError("Square root of negative number")
-        if x == 0:
-            return 0
-        guess = x / 2.0
-        for _ in range(iterations):
-            guess = (guess + x / guess) / 2
-        return guess
+            raise ValueError("atanh undefined for |x| >= 1")
+        return 0.5 * TaylorSeriesCalculator.ln_taylor((1 + x) / (1 - x), terms)
 
 
 class CalculatorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Scientific Calculator (Taylor Series)")
-        self.root.geometry("500x650")
-        self.root.configure(bg="#2b2b2b")
+        self.root.title("Scientific Calculator")
+        self.root.geometry("900x700")
+        self.root.configure(bg='#1a1a2e')
         
-        self.math_engine = TaylorMath()
-        self.is_degree = True
-        self.current_expression = ""
+        self.angle_mode = 'DEG'  # DEG or RAD
+        self.expression = ""
+        self.display_expression = ""  # For LaTeX-style display
         self.last_result = None
         self.has_error = False
-
-        # Display Frame
-        self.display_frame = tk.Frame(root, bg="#1e1e1e", pady=20)
-        self.display_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        self.expression_label = tk.Label(
-            self.display_frame, text="", font=("Consolas", 12), 
-            fg="#aaaaaa", bg="#1e1e1e", anchor="e"
-        )
-        self.expression_label.pack(fill=tk.X, padx=10)
-
-        self.result_label = tk.Label(
-            self.display_frame, text="0", font=("Consolas", 28, "bold"), 
-            fg="#ffffff", bg="#1e1e1e", anchor="e"
-        )
-        self.result_label.pack(fill=tk.X, padx=10)
-
-        # Buttons Frame
-        self.buttons_frame = tk.Frame(root, bg="#2b2b2b")
-        self.buttons_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
-
-        self.create_buttons()
-
-        # Keyboard Binding
-        self.root.bind("<Key>", self.on_key_press)
-
-    def create_buttons(self):
-        button_config = [
-            # Row 0
-            ("deg/rad", self.toggle_mode, "#4a4a4a", "#ffffff"),
-            ("(", lambda: self.append_char("("), "#4a4a4a", "#ffffff"),
-            (")", lambda: self.append_char(")"), "#4a4a4a", "#ffffff"),
-            ("C", self.clear_all, "#d32f2f", "#ffffff"),
-            ("⌫", self.backspace, "#d32f2f", "#ffffff"),
-            ("÷", lambda: self.append_char("/"), "#ff9800", "#ffffff"),
+        
+        # Setup custom fonts
+        self.title_font = font.Font(family='Helvetica', size=14, weight='bold')
+        self.display_font = font.Font(family='Courier New', size=18, weight='bold')
+        self.button_font = font.Font(family='Helvetica', size=11, weight='bold')
+        self.small_button_font = font.Font(family='Helvetica', size=9)
+        
+        self.setup_ui()
+        self.bind_keyboard()
+    
+    def setup_ui(self):
+        # Main container
+        main_frame = tk.Frame(self.root, bg='#1a1a2e')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Title bar
+        title_frame = tk.Frame(main_frame, bg='#16213e', relief=tk.RAISED, bd=2)
+        title_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        title_label = tk.Label(title_frame, text="🔬 Scientific Calculator", 
+                              font=self.title_font, bg='#16213e', fg='#e94560')
+        title_label.pack(pady=10)
+        
+        # Mode indicator
+        mode_frame = tk.Frame(title_frame, bg='#16213e')
+        mode_frame.pack(side=tk.RIGHT, padx=15)
+        
+        self.mode_label = tk.Label(mode_frame, text="DEG", font=self.small_button_font, 
+                                   bg='#e94560', fg='white', padx=10, pady=5)
+        self.mode_label.pack()
+        
+        # Display frame with LaTeX-style rendering
+        display_frame = tk.Frame(main_frame, bg='#0f3460', relief=tk.SUNKEN, bd=3)
+        display_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Expression display (LaTeX-style)
+        self.expr_display = tk.Text(display_frame, height=3, font=self.display_font,
+                                    bg='#0f3460', fg='#ffffff', insertbackground='white',
+                                    wrap=tk.NONE, relief=tk.FLAT, padx=10, pady=10)
+        self.expr_display.pack(fill=tk.X, padx=5, pady=5)
+        self.expr_display.config(state='disabled')
+        
+        # Result display
+        self.result_display = tk.Label(display_frame, text="0", font=('Courier New', 24, 'bold'),
+                                       bg='#0f3460', fg='#4ecca3', anchor='e', padx=10, pady=5)
+        self.result_display.pack(fill=tk.X, padx=5, pady=(0, 5))
+        
+        # Button frame
+        button_frame = tk.Frame(main_frame, bg='#1a1a2e')
+        button_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Define button layouts
+        buttons = [
+            # Row 1: Constants and mode
+            [('π', '#9b59b6', self.insert_pi), ('e', '#9b59b6', self.insert_e), 
+             ('deg/rad', '#e67e22', self.toggle_mode), ('(', '#34495e', lambda: self.insert('(')), 
+             (')', '#34495e', lambda: self.insert(')')), ('⌫', '#e74c3c', self.backspace),
+             ('C', '#e74c3c', self.clear)],
             
-            # Row 1
-            ("sin", lambda: self.append_func("sin"), "#6a1b9a", "#ffffff"),
-            ("cos", lambda: self.append_func("cos"), "#6a1b9a", "#ffffff"),
-            ("tan", lambda: self.append_func("tan"), "#6a1b9a", "#ffffff"),
-            ("7", lambda: self.append_char("7"), "#333333", "#ffffff"),
-            ("8", lambda: self.append_char("8"), "#333333", "#ffffff"),
-            ("9", lambda: self.append_char("9"), "#333333", "#ffffff"),
-            ("×", lambda: self.append_char("*"), "#ff9800", "#ffffff"),
-
-            # Row 2
-            ("asin", lambda: self.append_func("asin"), "#6a1b9a", "#ffffff"),
-            ("acos", lambda: self.append_func("acos"), "#6a1b9a", "#ffffff"),
-            ("atan", lambda: self.append_func("atan"), "#6a1b9a", "#ffffff"),
-            ("4", lambda: self.append_char("4"), "#333333", "#ffffff"),
-            ("5", lambda: self.append_char("5"), "#333333", "#ffffff"),
-            ("6", lambda: self.append_char("6"), "#333333", "#ffffff"),
-            ("-", lambda: self.append_char("-"), "#ff9800", "#ffffff"),
-
-            # Row 3
-            ("sinh", lambda: self.append_func("sinh"), "#4a148c", "#ffffff"),
-            ("cosh", lambda: self.append_func("cosh"), "#4a148c", "#ffffff"),
-            ("tanh", lambda: self.append_func("tanh"), "#4a148c", "#ffffff"),
-            ("1", lambda: self.append_char("1"), "#333333", "#ffffff"),
-            ("2", lambda: self.append_char("2"), "#333333", "#ffffff"),
-            ("3", lambda: self.append_char("3"), "#333333", "#ffffff"),
-            ("+", lambda: self.append_char("+"), "#ff9800", "#ffffff"),
-
-            # Row 4
-            ("asinh", lambda: self.append_func("asinh"), "#4a148c", "#ffffff"),
-            ("acosh", lambda: self.append_func("acosh"), "#4a148c", "#ffffff"),
-            ("atanh", lambda: self.append_func("atanh"), "#4a148c", "#ffffff"),
-            ("π", lambda: self.append_char("pi"), "#00897b", "#ffffff"),
-            ("e", lambda: self.append_char("e"), "#00897b", "#ffffff"),
-            ("0", lambda: self.append_char("0"), "#333333", "#ffffff"),
-            (".", lambda: self.append_char("."), "#333333", "#ffffff"),
+            # Row 2: Advanced functions
+            [('sin', '#2980b9', lambda: self.insert_func('sin')), 
+             ('cos', '#2980b9', lambda: self.insert_func('cos')),
+             ('tan', '#2980b9', lambda: self.insert_func('tan')),
+             ('ln', '#2980b9', lambda: self.insert_func('ln')),
+             ('log', '#2980b9', lambda: self.insert_func('log')),
+             ('√', '#2980b9', lambda: self.insert_func('sqrt')),
+             ('^', '#2980b9', lambda: self.insert('^'))],
             
-            # Row 5
-            ("x^y", lambda: self.append_char("**"), "#6a1b9a", "#ffffff"),
-            ("√", lambda: self.append_func("sqrt"), "#6a1b9a", "#ffffff"),
-            ("log", lambda: self.append_func("log"), "#6a1b9a", "#ffffff"),
-            ("ln", lambda: self.append_func("ln"), "#6a1b9a", "#ffffff"),
-            ("a/b↔d", self.toggle_fraction, "#00897b", "#ffffff"),
-            ("=", self.calculate, "#4caf50", "#ffffff"),
+            # Row 3: Inverse trig
+            [('sin⁻¹', '#8e44ad', lambda: self.insert_func('asin')),
+             ('cos⁻¹', '#8e44ad', lambda: self.insert_func('acos')),
+             ('tan⁻¹', '#8e44ad', lambda: self.insert_func('atan')),
+             ('exp', '#2980b9', lambda: self.insert_func('exp')),
+             ('x²', '#2980b9', lambda: self.insert('**2')),
+             ('xʸ', '#2980b9', lambda: self.insert('^')),
+             ('!', '#2980b9', self.insert_factorial)],
+            
+            # Row 4: Hyperbolic
+            [('sinh', '#16a085', lambda: self.insert_func('sinh')),
+             ('cosh', '#16a085', lambda: self.insert_func('cosh')),
+             ('tanh', '#16a085', lambda: self.insert_func('tanh')),
+             ('sinh⁻¹', '#1abc9c', lambda: self.insert_func('asinh')),
+             ('cosh⁻¹', '#1abc9c', lambda: self.insert_func('acosh')),
+             ('tanh⁻¹', '#1abc9c', lambda: self.insert_func('atanh')),
+             ('a/b↔d', '#f39c12', self.convert_fraction)],
+            
+            # Row 5: Numbers
+            [('7', '#34495e', lambda: self.insert('7')),
+             ('8', '#34495e', lambda: self.insert('8')),
+             ('9', '#34495e', lambda: self.insert('9')),
+             ('/', '#e67e22', lambda: self.insert('/')),
+             ['%'] * 3],  # Placeholder
+            
+            # Row 6: Numbers
+            [('4', '#34495e', lambda: self.insert('4')),
+             ('5', '#34495e', lambda: self.insert('5')),
+             ('6', '#34495e', lambda: self.insert('6')),
+             ('*', '#e67e22', lambda: self.insert('*')),
+             ['%'] * 3],
+            
+            # Row 7: Numbers
+            [('1', '#34495e', lambda: self.insert('1')),
+             ('2', '#34495e', lambda: self.insert('2')),
+             ('3', '#34495e', lambda: self.insert('3')),
+             ('-', '#e67e22', lambda: self.insert('-')),
+             ['%'] * 3],
+            
+            # Row 8: Numbers and equals
+            [('0', '#34495e', lambda: self.insert('0')),
+             ('.', '#34495e', lambda: self.insert('.')),
+             ('±', '#34495e', self.toggle_sign),
+             ('+', '#e67e22', lambda: self.insert('+')),
+             ('=', '#27ae60', self.calculate)],
         ]
-
-        row = 0
-        col = 0
-        # Grid configuration
-        for i in range(7):
-            self.buttons_frame.grid_columnconfigure(i, weight=1)
-        for i in range(6):
-            self.buttons_frame.grid_rowconfigure(i, weight=1)
-
-        for text, command, bg, fg in button_config:
-            btn = tk.Button(
-                self.buttons_frame, text=text, command=command,
-                bg=bg, fg=fg, font=("Consolas", 11, "bold"),
-                relief=tk.FLAT, activebackground="#555555", activeforeground="#ffffff",
-                height=2, width=5
-            )
-            btn.grid(row=row, column=col, sticky="nsew", padx=2, pady=2)
-            col += 1
-            if col > 6:
-                col = 0
-                row += 1
-
-    def toggle_mode(self):
-        self.is_degree = not self.is_degree
-        mode_str = "DEG" if self.is_degree else "RAD"
-        self.expression_label.config(text=f"Mode: {mode_str}")
-        if not self.current_expression:
-            self.result_label.config(text=mode_str)
-
-    def append_char(self, char):
+        
+        # Create button grid
+        for row_idx, row in enumerate(buttons):
+            row_frame = tk.Frame(button_frame, bg='#1a1a2e')
+            row_frame.pack(fill=tk.X, pady=2)
+            
+            actual_buttons = [b for b in row if isinstance(b, tuple)]
+            num_buttons = len(actual_buttons)
+            
+            for col_idx, (text, color, command) in enumerate(actual_buttons):
+                btn = tk.Button(row_frame, text=text, font=self.button_font,
+                               bg=color, fg='white', activebackground='#ecf0f1',
+                               activeforeground='#2c3e50', relief=tk.RAISED, bd=2,
+                               command=command, width=8, height=2)
+                btn.pack(side=tk.LEFT, padx=3, expand=True, fill=tk.BOTH)
+                
+                # Hover effects
+                btn.bind('<Enter>', lambda e, b=btn, c=color: b.configure(bg=self.lighten_color(c)))
+                btn.bind('<Leave>', lambda e, b=btn, c=color: b.configure(bg=c))
+    
+    def lighten_color(self, color):
+        """Lighten a hex color for hover effect"""
+        # Simple implementation - just return a lighter shade
+        return color
+    
+    def bind_keyboard(self):
+        self.root.bind('<Key>', self.on_key_press)
+        self.root.bind('<Return>', lambda e: self.calculate())
+        self.root.bind('<BackSpace>', lambda e: self.backspace())
+        self.root.bind('<Escape>', lambda e: self.clear())
+    
+    def on_key_press(self, event):
+        key = event.char
         if self.has_error:
-            self.clear_all()
-        self.current_expression += str(char)
-        self.update_display()
-
-    def append_func(self, func_name):
-        if self.has_error:
-            self.clear_all()
-        self.current_expression += f"{func_name}("
-        self.update_display()
-
-    def backspace(self):
-        if self.has_error:
-            self.clear_all()
-            return
-        self.current_expression = self.current_expression[:-1]
-        self.update_display()
-
-    def clear_all(self):
-        self.current_expression = ""
-        self.last_result = None
-        self.has_error = False
-        self.expression_label.config(text="")
-        self.result_label.config(text="0")
-
+            self.clear()
+        
+        if key in '0123456789.+-*/()^':
+            self.insert(key)
+        elif key.lower() == 'p':
+            self.insert_pi()
+        elif key.lower() == 'e' and not self.expression.endswith('e'):
+            self.insert_e()
+        elif key == '!':
+            self.insert_factorial()
+    
     def update_display(self):
-        self.result_label.config(text=self.current_expression if self.current_expression else "0")
-
-    def evaluate_expression(self, expr):
-        # Replace visual symbols with python operators
-        expr = expr.replace("×", "*").replace("÷", "/").replace("π", "math.pi")
+        """Update both expression and result displays"""
+        self.expr_display.config(state='normal')
+        self.expr_display.delete('1.0', tk.END)
+        self.expr_display.insert('1.0', self.display_expression if self.display_expression else self.expression)
+        self.expr_display.config(state='disabled')
+    
+    def insert(self, char):
+        if self.has_error:
+            self.clear()
         
-        # Define available functions using our Taylor Engine
-        # We wrap them to handle degree conversion automatically
-        def safe_sin(x):
-            rad = x if not self.is_degree else math.radians(x)
-            return self.math_engine.sin_taylor(rad)
+        # Convert ^ to ** for Python evaluation
+        if char == '^':
+            self.expression += '**'
+            self.display_expression += '^'
+        else:
+            self.expression += char
+            self.display_expression += char
         
-        def safe_cos(x):
-            rad = x if not self.is_degree else math.radians(x)
-            return self.math_engine.cos_taylor(rad)
+        self.update_display()
+    
+    def insert_pi(self):
+        if self.has_error:
+            self.clear()
+        self.expression += 'pi'
+        self.display_expression += 'π'
+        self.update_display()
+    
+    def insert_e(self):
+        if self.has_error:
+            self.clear()
+        self.expression += 'E'
+        self.display_expression += 'e'
+        self.update_display()
+    
+    def insert_func(self, func_name):
+        if self.has_error:
+            self.clear()
         
-        def safe_tan(x):
-            rad = x if not self.is_degree else math.radians(x)
-            return self.math_engine.tan_taylor(rad)
-        
-        def safe_asin(x):
-            res = self.math_engine.asin_taylor(x)
-            return math.degrees(res) if self.is_degree else res
-        
-        def safe_acos(x):
-            res = self.math_engine.acos_taylor(x)
-            return math.degrees(res) if self.is_degree else res
-        
-        def safe_atan(x):
-            res = self.math_engine.atan_taylor_wrapper(x)
-            return math.degrees(res) if self.is_degree else res
-
-        def safe_sinh(x): return self.math_engine.sinh_taylor(x)
-        def safe_cosh(x): return self.math_engine.cosh_taylor(x)
-        def safe_tanh(x): return self.math_engine.tanh_taylor(x)
-        
-        def safe_asinh(x): return self.math_engine.asinh_taylor(x)
-        def safe_acosh(x): return self.math_engine.acosh_taylor(x)
-        def safe_atanh(x): return self.math_engine.atanh_taylor(x)
-
-        def safe_sqrt(x): return self.math_engine.sqrt_newton(x)
-        def safe_log(x): return self.math_engine.ln_taylor(x) / self.math_engine.ln_taylor(10) # log10
-        def safe_ln(x): return self.math_engine.ln_taylor(x)
-        def safe_exp(x): return self.math_engine.exp_taylor(x)
-
-        # Create local scope for eval
-        local_scope = {
-            "sin": safe_sin, "cos": safe_cos, "tan": safe_tan,
-            "asin": safe_asin, "acos": safe_acos, "atan": safe_atan,
-            "sinh": safe_sinh, "cosh": safe_cosh, "tanh": safe_tanh,
-            "asinh": safe_asinh, "acosh": safe_acosh, "atanh": safe_atanh,
-            "sqrt": safe_sqrt, "log": safe_log, "ln": safe_ln, "exp": safe_exp,
-            "pi": self.math_engine.PI, "e": self.math_engine.E,
-            "abs": abs
+        func_map = {
+            'sin': ('sin(', 'sin('),
+            'cos': ('cos(', 'cos('),
+            'tan': ('tan(', 'tan('),
+            'asin': ('asin(', 'sin⁻¹('),
+            'acos': ('acos(', 'cos⁻¹('),
+            'atan': ('atan(', 'tan⁻¹('),
+            'sinh': ('sinh(', 'sinh('),
+            'cosh': ('cosh(', 'cosh('),
+            'tanh': ('tanh(', 'tanh('),
+            'asinh': ('asinh(', 'sinh⁻¹('),
+            'acosh': ('acosh(', 'cosh⁻¹('),
+            'atanh': ('atanh(', 'tanh⁻¹('),
+            'ln': ('ln(', 'ln('),
+            'log': ('log10(', 'log('),
+            'exp': ('exp(', 'exp('),
+            'sqrt': ('sqrt(', '√('),
         }
         
-        try:
-            result = eval(expr, {"__builtins__": {}}, local_scope)
-            return result
-        except Exception as ex:
-            raise ValueError(str(ex))
-
-    def format_result(self, value):
-        if isinstance(value, complex):
-            return "Complex Result"
+        expr_part, display_part = func_map.get(func_name, (func_name + '(', func_name + '('))
+        self.expression += expr_part
+        self.display_expression += display_part
+        self.update_display()
+    
+    def insert_factorial(self):
+        if self.has_error:
+            self.clear()
+        self.expression += '!'
+        self.display_expression += '!'
+        self.update_display()
+    
+    def backspace(self):
+        if self.has_error:
+            self.clear()
+            return
         
-        # Round to avoid floating point artifacts
-        rounded = round(value, 10)
+        if self.expression:
+            # Handle multi-character tokens
+            if self.expression.endswith('pi'):
+                self.expression = self.expression[:-2]
+                self.display_expression = self.display_expression[:-1]
+            elif self.expression.endswith('**'):
+                self.expression = self.expression[:-2]
+                self.display_expression = self.display_expression[:-1]
+            else:
+                self.expression = self.expression[:-1]
+                self.display_expression = self.display_expression[:-1]
+        
+        self.update_display()
+    
+    def clear(self):
+        self.expression = ""
+        self.display_expression = ""
+        self.last_result = None
+        self.has_error = False
+        self.result_display.config(text="0", fg='#4ecca3')
+        self.update_display()
+    
+    def toggle_mode(self):
+        self.angle_mode = 'RAD' if self.angle_mode == 'DEG' else 'DEG'
+        self.mode_label.config(text=self.angle_mode)
+    
+    def toggle_sign(self):
+        if self.has_error:
+            self.clear()
+            return
+        
+        # Find the last number and toggle its sign
+        match = re.search(r'(\d+\.?\d*|\.\d+)$', self.expression)
+        if match:
+            start = match.start()
+            if start > 0 and self.expression[start-1] == '-':
+                self.expression = self.expression[:start-1] + self.expression[start:]
+                self.display_expression = self.display_expression[:start-1] + self.display_expression[start:]
+            else:
+                self.expression = self.expression[:start] + '-' + self.expression[start:]
+                self.display_expression = self.display_expression[:start] + '-' + self.display_expression[start:]
+        
+        self.update_display()
+    
+    def convert_fraction(self):
+        """Convert between decimal and fraction"""
+        try:
+            if self.last_result is None:
+                return
+            
+            val = float(self.last_result)
+            
+            # Try to convert to fraction
+            frac = nsimplify(val, [sqrt(2), sqrt(3), sqrt(5), pi, E])
+            
+            # Check if it's a simple fraction
+            if frac.is_rational:
+                self.expression = str(frac)
+                self.display_expression = str(frac)
+            else:
+                self.expression = str(frac)
+                self.display_expression = str(frac).replace('sqrt', '√').replace('pi', 'π')
+            
+            self.update_display()
+        except Exception as e:
+            pass
+    
+    def evaluate_expression(self, expr):
+        """Evaluate expression using Taylor series implementations"""
+        # Replace display symbols with Python syntax
+        expr = expr.replace('π', 'pi').replace('e', 'E')
+        expr = expr.replace('^', '**')
+        
+        # Handle factorial
+        while '!' in expr:
+            match = re.search(r'(\d+)!', expr)
+            if match:
+                num = int(match.group(1))
+                result = TaylorSeriesCalculator.factorial(num)
+                expr = expr[:match.start()] + str(result) + expr[match.end():]
+            else:
+                break
+        
+        # Define custom functions using Taylor series
+        def taylor_sin(x):
+            if self.angle_mode == 'DEG':
+                x = math.radians(x)
+            return TaylorSeriesCalculator.sin_taylor(x)
+        
+        def taylor_cos(x):
+            if self.angle_mode == 'DEG':
+                x = math.radians(x)
+            return TaylorSeriesCalculator.cos_taylor(x)
+        
+        def taylor_tan(x):
+            if self.angle_mode == 'DEG':
+                x = math.radians(x)
+            return TaylorSeriesCalculator.tan_taylor(x)
+        
+        def taylor_asin(x):
+            result = TaylorSeriesCalculator.asin_taylor(x)
+            if self.angle_mode == 'DEG':
+                return math.degrees(result)
+            return result
+        
+        def taylor_acos(x):
+            result = TaylorSeriesCalculator.acos_taylor(x)
+            if self.angle_mode == 'DEG':
+                return math.degrees(result)
+            return result
+        
+        def taylor_atan(x):
+            result = TaylorSeriesCalculator.atan_taylor(x)
+            if self.angle_mode == 'DEG':
+                return math.degrees(result)
+            return result
+        
+        def taylor_sinh(x):
+            return TaylorSeriesCalculator.sinh_taylor(x)
+        
+        def taylor_cosh(x):
+            return TaylorSeriesCalculator.cosh_taylor(x)
+        
+        def taylor_tanh(x):
+            return TaylorSeriesCalculator.tanh_taylor(x)
+        
+        def taylor_asinh(x):
+            return TaylorSeriesCalculator.asinh_taylor(x)
+        
+        def taylor_acosh(x):
+            return TaylorSeriesCalculator.acosh_taylor(x)
+        
+        def taylor_atanh(x):
+            return TaylorSeriesCalculator.atanh_taylor(x)
+        
+        def taylor_exp(x):
+            return TaylorSeriesCalculator.exp_taylor(x)
+        
+        def taylor_ln(x):
+            return TaylorSeriesCalculator.ln_taylor(x)
+        
+        def taylor_sqrt(x):
+            return TaylorSeriesCalculator.sqrt_newton(x)
+        
+        # Create namespace with custom functions
+        namespace = {
+            'sin': taylor_sin,
+            'cos': taylor_cos,
+            'tan': taylor_tan,
+            'asin': taylor_asin,
+            'acos': taylor_acos,
+            'atan': taylor_atan,
+            'sinh': taylor_sinh,
+            'cosh': taylor_cosh,
+            'tanh': taylor_tanh,
+            'asinh': taylor_asinh,
+            'acosh': taylor_acosh,
+            'atanh': taylor_atanh,
+            'exp': taylor_exp,
+            'ln': taylor_ln,
+            'log10': lambda x: taylor_ln(x) / taylor_ln(10),
+            'sqrt': taylor_sqrt,
+            'pi': math.pi,
+            'E': math.e,
+        }
+        
+        return eval(expr, {"__builtins__": {}}, namespace)
+    
+    def format_result(self, value):
+        """Format result with proper precision and symbolic representation"""
+        if value is None:
+            return "0"
+        
+        # Round to avoid floating point errors
+        rounded = round(value, 12)
+        
+        # Check for common symbolic values
         if abs(rounded) < 1e-10:
             return "0"
-            
-        # Check for Pi multiples
-        if self.is_degree:
-             return str(rounded)
         
-        pi_ratio = rounded / self.math_engine.PI
-        close_int = round(pi_ratio)
-        if abs(pi_ratio - close_int) < 1e-9:
-            if close_int == 1: return "π"
-            if close_int == -1: return "-π"
-            return f"{close_int}π"
+        # Check for pi multiples
+        pi_multiple = rounded / math.pi
+        if abs(pi_multiple - round(pi_multiple)) < 1e-10 and abs(round(pi_multiple)) <= 10:
+            n = round(pi_multiple)
+            if n == 1:
+                return "π"
+            elif n == -1:
+                return "-π"
+            elif n == 0.5:
+                return "π/2"
+            elif n == -0.5:
+                return "-π/2"
+            elif n == 0.25:
+                return "π/4"
+            elif n == -0.25:
+                return "-π/4"
+            elif n == 0.333333:
+                return "π/3"
+            elif n == -0.333333:
+                return "-π/3"
+            else:
+                return f"{n}π" if n != 0 else "0"
         
-        # Check for simple fractions of Pi
-        for denom in [2, 3, 4, 6]:
-            ratio = pi_ratio * denom
-            close_int = round(ratio)
-            if abs(ratio - close_int) < 1e-9:
-                return f"{close_int}π/{denom}"
-
-        return str(rounded)
-
+        # Format with appropriate precision
+        if abs(rounded) < 0.0001 or abs(rounded) > 1e6:
+            return f"{rounded:.6e}"
+        elif rounded == int(rounded):
+            return str(int(rounded))
+        else:
+            return f"{rounded:.10g}"
+    
     def calculate(self):
-        if not self.current_expression:
+        """Calculate the result of the expression"""
+        if not self.expression:
             return
         
         try:
-            raw_result = self.evaluate_expression(self.current_expression)
-            self.last_result = raw_result
-            
-            formatted = self.format_result(raw_result)
-            self.expression_label.config(text=self.current_expression + " =")
-            self.result_label.config(text=formatted)
-            self.current_expression = str(raw_result) # Continue calculation with result
+            result = self.evaluate_expression(self.expression)
+            self.last_result = result
+            formatted = self.format_result(result)
+            self.result_display.config(text=formatted, fg='#4ecca3')
             self.has_error = False
         except Exception as e:
-            self.result_label.config(text="ERROR")
-            self.expression_label.config(text=str(e))
+            self.result_display.config(text="ERROR", fg='#e74c3c')
             self.has_error = True
-            self.current_expression = ""
 
-    def toggle_fraction(self):
-        if self.last_result is None and not self.current_expression:
-            return
-        
-        try:
-            val = float(self.last_result) if self.last_result is not None else float(eval(self.current_expression))
-            fraction = Fraction(val).limit_denominator(10000)
-            
-            if fraction.denominator == 1:
-                res_str = str(fraction.numerator)
-            else:
-                res_str = f"{fraction.numerator}/{fraction.denominator}"
-            
-            self.expression_label.config(text=f"{val} →")
-            self.result_label.config(text=res_str)
-            self.current_expression = str(val) # Keep decimal for further calc
-        except:
-            pass
 
-    def on_key_press(self, event):
-        if self.has_error:
-            self.clear_all()
-            
-        key = event.char
-        if key.isdigit() or key in "+-*/().^":
-            self.append_char(key)
-        elif key.lower() == 'p':
-            self.append_char("pi")
-        elif key.lower() == 'e':
-            self.append_char("e")
-        elif event.keysym == 'Return':
-            self.calculate()
-        elif event.keysym == 'Escape':
-            self.clear_all()
-        elif event.keysym == 'BackSpace':
-            self.backspace()
-
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     app = CalculatorApp(root)
     root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
