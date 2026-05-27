@@ -13,30 +13,43 @@
             <div id="secondary-display"></div>
         </div>
         <div class="buttons">
-            <!-- Scientific functions row 1 -->
-            <button class="btn func" onclick="appendFunction('sin')">sin</button>
-            <button class="btn func" onclick="appendFunction('cos')">cos</button>
-            <button class="btn func" onclick="appendFunction('tan')">tan</button>
-            <button class="btn func" onclick="appendOperator('^')">x^y</button>
-            
-            <!-- Scientific functions row 2 -->
-            <button class="btn func" onclick="appendFunction('asin')">sin⁻¹</button>
-            <button class="btn func" onclick="appendFunction('acos')">cos⁻¹</button>
-            <button class="btn func" onclick="appendFunction('atan')">tan⁻¹</button>
-            <button class="btn func" onclick="appendFunction('sqrt')">√</button>
-            
-            <!-- Additional functions row 3 -->
-            <button class="btn func" onclick="appendFunction('log')">log</button>
-            <button class="btn func" onclick="appendFunction('ln')">ln</button>
+            <!-- Constants row -->
+            <button class="btn const" onclick="appendFunction('pi')">π</button>
+            <button class="btn const" onclick="appendFunction('e')">e</button>
             <button class="btn func" onclick="toggleMode()">DEG</button>
             <button class="btn clear" onclick="clearDisplay()">C</button>
             
-            <!-- Numbers and operators -->
+            <!-- Hyperbolic functions row 1 -->
+            <button class="btn func" onclick="appendFunction('sinh')">sinh</button>
+            <button class="btn func" onclick="appendFunction('cosh')">cosh</button>
+            <button class="btn func" onclick="appendFunction('tanh')">tanh</button>
+            <button class="btn func" onclick="appendFunction('sqrt')">√</button>
+            
+            <!-- Inverse hyperbolic row 2 -->
+            <button class="btn func" onclick="appendFunction('asinh')">sinh⁻¹</button>
+            <button class="btn func" onclick="appendFunction('acosh')">cosh⁻¹</button>
+            <button class="btn func" onclick="appendFunction('atanh')">tanh⁻¹</button>
             <button class="btn operator" onclick="deleteLast()">⌫</button>
+            
+            <!-- Trig functions row 3 -->
+            <button class="btn func" onclick="appendFunction('sin')">sin</button>
+            <button class="btn func" onclick="appendFunction('cos')">cos</button>
+            <button class="btn func" onclick="appendFunction('tan')">tan</button>
             <button class="btn operator" onclick="appendOperator('/')">/</button>
+            
+            <!-- Inverse trig row 4 -->
+            <button class="btn func" onclick="appendFunction('asin')">sin⁻¹</button>
+            <button class="btn func" onclick="appendFunction('acos')">cos⁻¹</button>
+            <button class="btn func" onclick="appendFunction('atan')">tan⁻¹</button>
             <button class="btn operator" onclick="appendOperator('*')">×</button>
+            
+            <!-- Log functions and operators -->
+            <button class="btn func" onclick="appendFunction('log')">log</button>
+            <button class="btn func" onclick="appendFunction('ln')">ln</button>
+            <button class="btn func" onclick="appendOperator('^')">x^y</button>
             <button class="btn operator" onclick="appendOperator('-')">-</button>
             
+            <!-- Numbers and operators -->
             <button class="btn number" onclick="appendNumber('7')">7</button>
             <button class="btn number" onclick="appendNumber('8')">8</button>
             <button class="btn number" onclick="appendNumber('9')">9</button>

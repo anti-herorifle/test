@@ -18,7 +18,7 @@ body {
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     overflow: hidden;
-    width: 400px;
+    width: 450px;
 }
 
 .display {
@@ -115,11 +115,21 @@ body {
 .btn.func {
     background: #9b59b6;
     color: #fff;
-    font-size: 1rem;
+    font-size: 0.9rem;
 }
 
 .btn.func:hover {
     background: #8e44ad;
+}
+
+.btn.const {
+    background: #1abc9c;
+    color: #fff;
+    font-size: 1.2rem;
+}
+
+.btn.const:hover {
+    background: #16a085;
 }
 
 .btn.mode-active {
